@@ -1,0 +1,85 @@
+# This file is the entry point to configure your own services.
+# Files in the packages/ subdirectory configure your dependencies.
+
+# Put parameters here that don't need to change on each machine where the app is deployed
+# https://symfony.com/doc/current/best_practices.html#use-parameters-for-application-configuration
+parameters:
+  app.email_from: '%env(EMAIL_FROM)%'
+
+services:
+  # Default configuration for services in *this* file
+  _defaults:
+    autowire: true      # Automatically injects dependencies in your services
+    autoconfigure: true # Automatically registers your services as commands, event subscribers, etc.
+    public: false       # Makes services private by default -- this improves performance
+
+  # makes classes in src/ available to be used as services
+  # this creates a service per class whose id is the fully-qualified class name
+  App\:
+    resource: '../src/*'
+    exclude: '../src/{DependencyInjection,Entity,Tests,Kernel.php}'
+
+  App\Domain\Entity\:
+    resource: '../src/Domain/Entity'
+    exclude: '../src/Domain/Entity'
+
+  App\Infrastructure\Repository\:
+    resource: '../src/Infrastructure/Repository'
+    exclude: '../src/Infrastructure/Repository'
+
+  # Register the event handlers
+  App\Application\EventHandler\CarProductionStartedHandler:
+    arguments:
+      $logger: '@logger'
+
+  App\Application\EventHandler\CarProductionCompletedHandler:
+    arguments:
+      $logger: '@logger'
+
+  # Register the event dispatcher
+  App\Infrastructure\Event\EventDispatcher:
+    arguments:
+      $logger: '@logger'
+      $handlers:
+        App\Domain\Event\CarProductionStartedEvent:
+          - '@App\Application\EventHandler\CarProductionStartedHandler'
+        App\Domain\Event\CarProductionCompletedEvent:
+          - '@App\Application\EventHandler\CarProductionCompletedHandler'
+
+  # Register the EmailService
+  App\Contracts\Service\EmailServiceInterface:
+    factory: [ 'App\Infrastructure\Service\EmailService', 'getInstance' ]
+    arguments:
+      $mailer: '@mailer.mailer'
+      $params: '@parameter_bag'
+
+  # Register the LogService
+  App\Contracts\Service\LogServiceInterface:
+    factory: [ 'App\Infrastructure\Service\LogService', 'getInstance' ]
+    arguments:
+      $logger: '@logger'
+
+  # Register the DefaultValidationStrategy
+  App\Contracts\Validation\ValidationStrategyInterface:
+    alias: App\Infrastructure\Validation\DefaultValidationStrategy
+
+  # Register the CarFactory
+  App\Domain\Factory\CarFactory:
+    factory: [ 'App\Domain\Factory\CarFactoryRegistration', 'createCarFactory' ]
+
+  # Register the CarRepository
+  App\Infrastructure\Repository\CarRepository:
+    arguments:
+      $entityManager: '@doctrine.orm.entity_manager'
+  App\Contracts\Repository\CarRepositoryInterface: '@App\Infrastructure\Repository\CarRepository'
+
+  # Register the CarOrderCommand
+  App\Presentation\Command\CarOrderCommand:
+    arguments:
+      $placeOrder: '@App\Application\UseCase\PlaceOrder'
+    tags:
+      - { name: 'console.command' }
+
+  # Symfony logger service
+  logger: '@monolog.logger'
+
